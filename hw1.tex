@@ -141,4 +141,126 @@ We derive the backpropagation equations by applying the chain rule, starting fro
     \[ \frac{\partial J}{\partial x} = (W^{(4)})^T (y' - t) + (W^{(1)})^T \delta_{a_1} + (W^{(2)})^T \delta_{a_2} \]
 \end{enumerate}
 
+\subsection{Automatic Differentiation}
+
+\subsubsection*{Compute Hessian}
+
+The function is given by $\mathcal{L}(\mathbf{x}) = \frac{1}{2}\mathbf{x}^T\mathbf{v}\mathbf{v}^T\mathbf{x}$.
+Let's define a matrix $A = \mathbf{v}\mathbf{v}^T$. The function becomes a standard quadratic form: $\mathcal{L}(\mathbf{x}) = \frac{1}{2}\mathbf{x}^T A \mathbf{x}$.
+
+The gradient of $\mathcal{L}$ with respect to $\mathbf{x}$ is given by $\mathbf{g} = \nabla_{\mathbf{x}}\mathcal{L} = \frac{1}{2}(A + A^T)\mathbf{x}$.
+The matrix $A = \mathbf{v}\mathbf{v}^T$ is symmetric, since $A^T = (\mathbf{v}\mathbf{v}^T)^T = (\mathbf{v}^T)^T\mathbf{v}^T = \mathbf{v}\mathbf{v}^T = A$.
+Therefore, the gradient simplifies to $\mathbf{g} = \frac{1}{2}(A + A)\mathbf{x} = A\mathbf{x}$.
+
+The Hessian, $H$, is the Jacobian of the gradient $\mathbf{g}$ with respect to $\mathbf{x}$:
+\[ H = \frac{\partial \mathbf{g}}{\partial \mathbf{x}} = \frac{\partial (A\mathbf{x})}{\partial \mathbf{x}} = A \]
+So, the Hessian is simply $H = \mathbf{v}\mathbf{v}^T$. Note that the Hessian is constant and does not depend on the value of $\mathbf{x}$.
+
+For $n=3$ and $\mathbf{v} = [3, 1, 4]^T$, we compute the outer product:
+\[ H = \mathbf{v}\mathbf{v}^T = \begin{bmatrix} 3 \\ 1 \\ 4 \end{bmatrix} \begin{bmatrix} 3 & 1 & 4 \end{bmatrix} = \begin{bmatrix} 3 \cdot 3 & 3 \cdot 1 & 3 \cdot 4 \\ 1 \cdot 3 & 1 \cdot 1 & 1 \cdot 4 \\ 4 \cdot 3 & 4 \cdot 1 & 4 \cdot 4 \end{bmatrix} \]
+
+The resulting Hessian matrix is:
+\[ H = \begin{bmatrix} 9 & 3 & 12 \\ 3 & 1 & 4 \\ 12 & 4 & 16 \end{bmatrix} \]
+
+\subsubsection*{Computation Cost}
+
+\paragraph{Scalar Multiplications:}
+To compute the Hessian $H = \mathbf{v}\mathbf{v}^T$, we need to compute each of its $n^2$ elements. Each element $H_{ij}$ is the product of two scalars: $v_i \cdot v_j$. This requires one multiplication.
+Since there are $n^2$ elements in the $n \times n$ matrix, the total number of scalar multiplications is $n^2$.
+The computational cost is $O(n^2)$.
+
+\paragraph{Memory Cost:}
+The memory cost is determined by the size of the final matrix we need to store. The Hessian $H$ is an $n \times n$ matrix.
+Storing this matrix requires space for $n^2$ scalar values.
+The memory cost is $O(n^2)$.
+
+\subsubsection{Vector-Hessian Products}
+
+\paragraph{Numerical Computation}
+We are asked to compute $\mathbf{z} = H\mathbf{y}$ for $H = \mathbf{v}\mathbf{v}^T$, with $\mathbf{v} = [4, 1, 2]^T$ and $\mathbf{y} = [2, 2, 1]^T$.
+
+\subparagraph{Reverse-Mode:} In this approach, we group operations as $\mathbf{z} = \mathbf{v}(\mathbf{v}^T\mathbf{y})$.
+\begin{enumerate}
+    \item First, compute the scalar $M = \mathbf{v}^T\mathbf{y}$:
+    \[ M = \begin{bmatrix} 4 & 1 & 2 \end{bmatrix} \begin{bmatrix} 2 \\ 2 \\ 1 \end{bmatrix} = (4)(2) + (1)(2) + (2)(1) = 8 + 2 + 2 = 12 \]
+    \item Then, compute the final vector $\mathbf{z} = \mathbf{v}M$:
+    \[ \mathbf{z} = \begin{bmatrix} 4 \\ 1 \\ 2 \end{bmatrix} (12) = \begin{bmatrix} 48 \\ 12 \\ 24 \end{bmatrix} \]
+\end{enumerate}
+
+\subparagraph{Forward-Mode:} In this approach, we group operations as $\mathbf{z} = (\mathbf{v}\mathbf{v}^T)\mathbf{y}$.
+\begin{enumerate}
+    \item First, compute the full Hessian matrix $H = \mathbf{v}\mathbf{v}^T$:
+    \[ H = \begin{bmatrix} 4 \\ 1 \\ 2 \end{bmatrix} \begin{bmatrix} 4 & 1 & 2 \end{bmatrix} = \begin{bmatrix} 16 & 4 & 8 \\ 4 & 1 & 2 \\ 8 & 2 & 4 \end{bmatrix} \]
+    \item Then, compute the final vector $\mathbf{z} = H\mathbf{y}$:
+    \[ \mathbf{z} = \begin{bmatrix} 16 & 4 & 8 \\ 4 & 1 & 2 \\ 8 & 2 & 4 \end{bmatrix} \begin{bmatrix} 2 \\ 2 \\ 1 \end{bmatrix} = \begin{bmatrix} 16(2)+4(2)+8(1) \\ 4(2)+1(2)+2(1) \\ 8(2)+2(2)+4(1) \end{bmatrix} = \begin{bmatrix} 32+8+8 \\ 8+2+2 \\ 16+4+4 \end{bmatrix} = \begin{bmatrix} 48 \\ 12 \\ 24 \end{bmatrix} \]
+\end{enumerate}
+Both methods yield the same result: $\mathbf{z}^T = [48, 12, 24]$.
+
+\paragraph{Computational Cost Analysis}
+We analyze the cost of computing $Z = H\mathbf{y}_1\mathbf{y}_2^T$, interpreted as $Z = (\mathbf{v}\mathbf{v}^T)(\mathbf{y}_1\mathbf{y}_2^T)$. The resulting matrix $Z$ has dimensions $n \times m$. The relative efficiency of each mode depends on the shape of $Z$---that is, whether it is "tall" ($n > m$) or "wide" ($m > n$).
+
+\subparagraph{Forward-Mode Cost:}
+This approach computes the full $n \times n$ Hessian matrix $H$ first: $Z = (\mathbf{v}\mathbf{v}^T) (\mathbf{y}_1\mathbf{y}_2^T)$.
+\begin{enumerate}
+    \item Compute $H = \mathbf{v}\mathbf{v}^T$: $n^2$ multiplications.
+    \item Compute $Y = \mathbf{y}_1\mathbf{y}_2^T$: $nm$ multiplications.
+    \item Compute $Z = HY$: $n^2m$ multiplications.
+\end{enumerate}
+The total multiplications are $n^2 + nm + n^2m = n^2(1+m) + nm$. This approach is burdened by the $O(n^2)$ cost of creating and using the explicit Hessian, which is expensive if $n$ is large.
+
+\subparagraph{Reverse-Mode Cost:}
+This approach avoids forming the full Hessian by using associativity: $Z = \mathbf{v}(\mathbf{v}^T(\mathbf{y}_1\mathbf{y}_2^T))$.
+\begin{enumerate}
+    \item Compute $Y = \mathbf{y}_1\mathbf{y}_2^T$: $nm$ multiplications.
+    \item Compute the row vector $\mathbf{r} = \mathbf{v}^T Y$: $nm$ multiplications.
+    \item Compute the final matrix $Z = \mathbf{v}\mathbf{r}$: $nm$ multiplications.
+\end{enumerate}
+The total multiplications are $3nm$. This approach cleverly avoids the $O(n^2)$ costs.
+
+\subparagraph{Comparison:}
+Forward-mode is preferable when $n^2(1+m) + nm < 3nm$, which simplifies to $n < m(2-n)$. This inequality reveals how the shape of the $n \times m$ output matrix $Z$ dictates the best strategy:
+\begin{itemize}
+    \item If $n \ge 2$, the term $(2-n)$ is zero or negative, making the inequality impossible to satisfy for positive $n, m$. This covers all cases where $Z$ is square or "tall" ($n \ge m$). For these shapes, \textbf{reverse-mode} is always superior because it avoids the large $O(n^2)$ cost of building the Hessian.
+    \item If $n=1$, the inequality becomes $1 < m$. In this scenario, the Hessian is a trivial $1 \times 1$ scalar. \textbf{Forward-mode} becomes more efficient when $m>1$. This corresponds to producing a very "wide" matrix $Z$ (e.g., $1 \times 100$), where the negligible cost of the $1 \times 1$ Hessian makes the forward approach more economical.
+\end{itemize}
+
+
+\section{Programming Problems}
+
+\subsection{GLoVE Word Representations}
+
+\subsubsection{GLoVE Parameter Count (2.1.1)}
+
+The problem states that for each word in a vocabulary of size $V$, the GLoVE model learns two embedding vectors and two scalar biases. For each word, the parameters are:
+\begin{itemize}
+    \item A $d$-dimensional embedding vector $\mathbf{w}_i$, contributing $d$ parameters.
+    \item A second $d$-dimensional embedding vector $\tilde{\mathbf{w}}_i$, contributing $d$ parameters.
+    \item A scalar bias $b_i$, contributing 1 parameter.
+    \item A second scalar bias $\tilde{b}_i$, contributing 1 parameter.
+\end{itemize}
+The total number of parameters for a single word is $d + d + 1 + 1 = 2d + 2$.
+Since there are $V$ words in the vocabulary, the total number of parameters in the model is $V \times (2d + 2)$.
+
+\subsubsection{Expression for Gradient (2.1.2)}
+
+The simplified GLoVE loss function is given by:
+\[ L = \sum_{i=1}^{V} \sum_{j=1}^{V} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right)^2 \]
+To find the gradients, we differentiate this loss function with respect to a specific parameter vector $\mathbf{w}_k$ and a specific bias $b_k$.
+
+\paragraph{Gradient with respect to $\mathbf{w}_i$:}
+The parameter vector $\mathbf{w}_i$ only appears in the loss function terms where the first summation index is equal to $i$. Therefore, we only need to sum over the second index, $j$.
+\[ \frac{\partial L}{\partial \mathbf{w}_i} = \frac{\partial}{\partial \mathbf{w}_i} \sum_{j=1}^{V} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right)^2 \]
+Using the chain rule, where $\frac{d}{dx}u^2 = 2u \frac{du}{dx}$:
+\[ \frac{\partial L}{\partial \mathbf{w}_i} = \sum_{j=1}^{V} 2 \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right) \cdot \frac{\partial}{\partial \mathbf{w}_i} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right) \]
+The derivative of the inner term with respect to $\mathbf{w}_i$ is $\tilde{\mathbf{w}}_j$. This gives the final expression:
+\[ \frac{\partial L}{\partial \mathbf{w}_i} = 2 \sum_{j=1}^{V} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right) \tilde{\mathbf{w}}_j \]
+
+\paragraph{Gradient with respect to $b_i$:}
+Similarly, the bias $b_i$ only appears in terms where the first index is $i$.
+\[ \frac{\partial L}{\partial b_i} = \frac{\partial}{\partial b_i} \sum_{j=1}^{V} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right)^2 \]
+Applying the chain rule:
+\[ \frac{\partial L}{\partial b_i} = \sum_{j=1}^{V} 2 \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right) \cdot \frac{\partial}{\partial b_i} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right) \]
+The derivative of the inner term with respect to the scalar $b_i$ is 1. This gives the final expression:
+\[ \frac{\partial L}{\partial b_i} = 2 \sum_{j=1}^{V} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right) \]
+
 \end{document}
