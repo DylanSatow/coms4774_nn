@@ -1,0 +1,364 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{pdfpages}
+\title{Neural Networks hw1}
+\author{Dylan Satow}
+\date{October 2025}
+
+\begin{document}
+\maketitle
+
+\section{Written Problems}
+
+\subsection{Hard-Coding Neural Networks}
+
+The goal is to create a neural network that outputs 1 if the input sequence $(x_1, x_2, x_3, x_4)$ is a superincreasing sequence, and 0 otherwise. A sequence is superincreasing if every element is greater than the sum of its predecessors. For a 4-element sequence, this translates to the following three conditions being true simultaneously:
+\begin{enumerate}
+    \item $x_2 > x_1$
+    \item $x_3 > x_1 + x_2$
+    \item $x_4 > x_1 + x_2 + x_3$
+\end{enumerate}
+
+We can design the network to check each of these conditions in one of the three hidden units, and then use the output unit to perform a logical AND on the results from the hidden units.
+
+\paragraph{Activation Functions}
+For both the hidden layer ($\phi_1$) and the output layer ($\phi_2$), we will use the hard threshold activation function, defined in the assignment as:
+\[ \phi(z) = I(z \ge 0) = \begin{cases} 1 & \text{if } z \ge 0 \\ 0 & \text{if } z < 0 \end{cases} \]
+
+\paragraph{Hidden Layer}
+Each hidden unit $h_k$ will compute $h_k = \phi_1(\mathbf{w}^{(1)}_k \cdot \mathbf{x} + b^{(1)}_k)$. We want $h_k=1$ if the $k^{th}$ condition is met, and $h_k=0$ otherwise.
+
+\begin{itemize}
+    \item For $h_1$ (checks $x_2 > x_1 \iff x_2 - x_1 > 0$): We need the input to the activation, $z_1$, to be $\ge 0$ if and only if this condition holds. We can set $z_1 = x_2 - x_1$. This gives the weights $\mathbf{w}^{(1)}_1 = [-1, 1, 0, 0]$ and bias $b^{(1)}_1 = 0$.
+    
+    \item For $h_2$ (checks $x_3 > x_1 + x_2 \iff x_3 - x_1 - x_2 > 0$): We set $z_2 = x_3 - x_1 - x_2$. This gives the weights $\mathbf{w}^{(1)}_2 = [-1, -1, 1, 0]$ and bias $b^{(1)}_2 = 0.$
+
+    \item For $h_3$ (checks $x_4 > x_1 + x_2 + x_3 \iff x_4 - x_1 - x_2 - x_3 > 0$): We set $z_3 = x_4 - x_1 - x_2 - x_3$. This gives the weights $\mathbf{w}^{(1)}_3 = [-1, -1, -1, 1]$ and bias $b^{(1)}_3 = 0.$
+\end{itemize}
+
+\paragraph{Output Layer}
+The output unit $y$ computes $y = \phi_2(\mathbf{w}^{(2)} \cdot \mathbf{h} + b^{(2)})$. We need $y=1$ if and only if $h_1=1$, $h_2=1$, and $h_3=1$. This is a logical AND operation.
+The input to the output activation is $z_{out} = w^{(2)}_1 h_1 + w^{(2)}_2 h_2 + w^{(2)}_3 h_3 + b^{(2)}$.
+Let's set the weights $\mathbf{w}^{(2)} = [1, 1, 1]$. Then $z_{out} = h_1 + h_2 + h_3 + b^{(2)}$.
+\begin{itemize}
+    \item If all hidden units are 1, their sum is 3. We need $z_{out} = 3 + b^{(2)} \ge 0$.
+    \item If any hidden unit is 0, the maximum sum is 2. We need $z_{out} = 2 + b^{(2)} < 0$.
+\end{itemize}
+From these two conditions, we need $b^{(2)} \ge -3$ and $b^{(2)} < -2$. A value such as $b^{(2)} = -2.5$ would work. For an integer solution, if we choose $b^{(2)} = -3$, the first condition becomes $3-3=0 \ge 0$ (output 1) and the second becomes $2-3 = -1 < 0$ (output 0). This works perfectly.
+
+\paragraph{Final Parameters}
+\begin{itemize}
+    \item \textbf{Activation Functions}: $\phi_1(z) = \phi_2(z) = I(z \ge 0)$.
+    \item \textbf{Hidden Layer Weights}:
+    \[ W^{(1)} = \begin{bmatrix} -1 & 1 & 0 & 0 \\ -1 & -1 & 1 & 0 \\ -1 & -1 & -1 & 1 \end{bmatrix} \]
+    \item \textbf{Hidden Layer Biases}:
+    \[ \mathbf{b}^{(1)} = \begin{bmatrix} 0 \\ 0 \\ 0 \end{bmatrix} \]
+    \item \textbf{Output Layer Weights}:
+    \[ \mathbf{w}^{(2)} = \begin{bmatrix} 1 & 1 & 1 \end{bmatrix} \]
+    \item \textbf{Output Layer Bias}:
+    \[ b^{(2)} = -3 \]
+\end{itemize}
+
+
+
+
+\subsection{Backpropagation}
+
+\subsubsection*{Computation Graph}
+\includegraphics[width=100mm]{ComputationGraph.png}
+
+\subsubsection*{Backward Pass}
+
+We derive the backpropagation equations by applying the chain rule, starting from the output $J$ and moving backward through the graph. We compute the gradient of the cost $J$ with respect to each variable. Let $\delta_v = \frac{\partial J}{\partial v}$ denote the gradient of the loss with respect to a variable $v$.
+
+\begin{enumerate}
+    \item \textbf{Loss}: $J = -S$
+    \[ \frac{\partial J}{\partial S} = -1 \]
+
+    \item \textbf{Score}: $S = \sum_{k} t_k \log(y'_k)$ (assuming $t$ is one-hot, so $I(t_k=1)$ is $t_k$)
+    The gradient of the cross-entropy loss with respect to the softmax input $y$ is a standard result:
+    \[ \delta_y = \frac{\partial J}{\partial y} = y' - t \]
+
+    \item \textbf{Output Logits}: $y = W^{(3)}g + W^{(4)}x$. From here, we can compute gradients for $g, x, W^{(3)}, W^{(4)}$.
+    \[ \delta_g = \frac{\partial J}{\partial g} = (W^{(3)})^T \delta_y \]
+    \[ \delta_x^{\text{(from y)}} = (W^{(4)})^T \delta_y \]
+    The gradients for the weights are:
+    \[ \delta_{W^{(3)}} = \delta_y g^T \]
+    \[ \delta_{W^{(4)}} = \delta_y x^T \]
+
+    \item \textbf{Hidden Layer g}: $g = W^{(g)}[c_1; c_2] + b^{(g)}$. Let $c_{concat} = [c_1; c_2]$.
+    \[ \delta_{c_{concat}} = \frac{\partial J}{\partial c_{concat}} = (W^{(g)})^T \delta_g \]
+    This gradient is then split for $c_1$ and $c_2$:
+    \[ \delta_{c_1} = (\delta_{c_{concat}})_{1:d_1} \quad \text{and} \quad \delta_{c_2} = (\delta_{c_{concat}})_{d_1+1:end} \]
+    (where $d_1$ is the dimension of $c_1$).
+    The gradients for the weights are:
+    \[ \delta_{W^{(g)}} = \delta_g c_{concat}^T \]
+    \[ \delta_{b^{(g)}} = \delta_g \]
+
+    \item \textbf{ReLU Activation}: $c_2 = \text{ReLU}(u)$
+    \[ \delta_u = \frac{\partial J}{\partial u} = \delta_{c_2} \odot I(u > 0) \quad \text{($\odot$ is element-wise product)} \]
+
+    \item \textbf{Sum}: $u = a_1 + a_2$
+    \[ \delta_{a_1}^{\text{(from u)}} = \delta_u \quad \text{and} \quad \delta_{a_2} = \delta_u \]
+
+    \item \textbf{Sigmoid Activation}: $c_1 = \sigma(a_1)$
+    \[ \delta_{a_1}^{\text{(from c1)}} = \delta_{c_1} \odot (\sigma(a_1)(1-\sigma(a_1))) = \delta_{c_1} \odot (c_1(1-c_1)) \]
+
+    \item \textbf{Total gradients for $a_1, a_2$}:
+    \[ \delta_{a_1} = \delta_{a_1}^{\text{(from c1)}} + \delta_{a_1}^{\text{(from u)}} = (\delta_{c_1} \odot (c_1(1-c_1))) + \delta_u \]
+    \[ \delta_{a_2} = \delta_u \]
+
+    \item \textbf{Linear Layers $a_1, a_2$}:
+    For $a_1 = W^{(1)}x + b^{(1)}$:
+    \[ \delta_x^{\text{(from a1)}} = (W^{(1)})^T \delta_{a_1} \]
+    \[ \delta_{W^{(1)}} = \delta_{a_1} x^T \]
+    \[ \delta_{b^{(1)}} = \delta_{a_1} \]
+    For $a_2 = W^{(2)}x + b^{(2)}$:
+    \[ \delta_x^{\text{(from a2)}} = (W^{(2)})^T \delta_{a_2} \]
+    \[ \delta_{W^{(2)}} = \delta_{a_2} x^T \]
+    \[ \delta_{b^{(2)}} = \delta_{a_2} \]
+
+    \item \textbf{Total Gradient for x}: The final gradient for $x$ is the sum from all paths:
+    \[ \delta_x = \frac{\partial J}{\partial x} = \delta_x^{\text{(from y)}} + \delta_x^{\text{(from a1)}} + \delta_x^{\text{(from a2)}} \]
+    \[ \frac{\partial J}{\partial x} = (W^{(4)})^T (y' - t) + (W^{(1)})^T \delta_{a_1} + (W^{(2)})^T \delta_{a_2} \]
+\end{enumerate}
+
+\subsection{Automatic Differentiation}
+
+\subsubsection*{Compute Hessian}
+
+The function is given by $\mathcal{L}(\mathbf{x}) = \frac{1}{2}\mathbf{x}^T\mathbf{v}\mathbf{v}^T\mathbf{x}$.
+Let's define a matrix $A = \mathbf{v}\mathbf{v}^T$. The function becomes a standard quadratic form: $\mathcal{L}(\mathbf{x}) = \frac{1}{2}\mathbf{x}^T A \mathbf{x}$.
+
+The gradient of $\mathcal{L}$ with respect to $\mathbf{x}$ is given by $\mathbf{g} = \nabla_{\mathbf{x}}\mathcal{L} = \frac{1}{2}(A + A^T)\mathbf{x}$.
+The matrix $A = \mathbf{v}\mathbf{v}^T$ is symmetric, since $A^T = (\mathbf{v}\mathbf{v}^T)^T = (\mathbf{v}^T)^T\mathbf{v}^T = \mathbf{v}\mathbf{v}^T = A$.
+Therefore, the gradient simplifies to $\mathbf{g} = \frac{1}{2}(A + A)\mathbf{x} = A\mathbf{x}$.
+
+The Hessian, $H$, is the Jacobian of the gradient $\mathbf{g}$ with respect to $\mathbf{x}$:
+\[ H = \frac{\partial \mathbf{g}}{\partial \mathbf{x}} = \frac{\partial (A\mathbf{x})}{\partial \mathbf{x}} = A \]
+So, the Hessian is simply $H = \mathbf{v}\mathbf{v}^T$. Note that the Hessian is constant and does not depend on the value of $\mathbf{x}$.
+
+For $n=3$ and $\mathbf{v} = [3, 1, 4]^T$, we compute the outer product:
+\[ H = \mathbf{v}\mathbf{v}^T = \begin{bmatrix} 3 \\ 1 \\ 4 \end{bmatrix} \begin{bmatrix} 3 & 1 & 4 \end{bmatrix} = \begin{bmatrix} 3 \cdot 3 & 3 \cdot 1 & 3 \cdot 4 \\ 1 \cdot 3 & 1 \cdot 1 & 1 \cdot 4 \\ 4 \cdot 3 & 4 \cdot 1 & 4 \cdot 4 \end{bmatrix} \]
+
+The resulting Hessian matrix is:
+\[ H = \begin{bmatrix} 9 & 3 & 12 \\ 3 & 1 & 4 \\ 12 & 4 & 16 \end{bmatrix} \]
+
+\subsubsection*{Computation Cost}
+
+\paragraph{Scalar Multiplications:}
+To compute the Hessian $H = \mathbf{v}\mathbf{v}^T$, we need to compute each of its $n^2$ elements. Each element $H_{ij}$ is the product of two scalars: $v_i \cdot v_j$. This requires one multiplication.
+Since there are $n^2$ elements in the $n \times n$ matrix, the total number of scalar multiplications is $n^2$.
+The computational cost is $O(n^2)$.
+
+\paragraph{Memory Cost:}
+The memory cost is determined by the size of the final matrix we need to store. The Hessian $H$ is an $n \times n$ matrix.
+Storing this matrix requires space for $n^2$ scalar values.
+The memory cost is $O(n^2)$.
+
+\subsubsection{Vector-Hessian Products}
+
+\paragraph{Numerical Computation}
+We are asked to compute $\mathbf{z} = H\mathbf{y}$ for $H = \mathbf{v}\mathbf{v}^T$, with $\mathbf{v} = [4, 1, 2]^T$ and $\mathbf{y} = [2, 2, 1]^T$.
+
+\subparagraph{Reverse-Mode:} In this approach, we group operations as $\mathbf{z} = \mathbf{v}(\mathbf{v}^T\mathbf{y})$.
+\begin{enumerate}
+    \item First, compute the scalar $M = \mathbf{v}^T\mathbf{y}$:
+    \[ M = \begin{bmatrix} 4 & 1 & 2 \end{bmatrix} \begin{bmatrix} 2 \\ 2 \\ 1 \end{bmatrix} = (4)(2) + (1)(2) + (2)(1) = 8 + 2 + 2 = 12 \]
+    \item Then, compute the final vector $\mathbf{z} = \mathbf{v}M$:
+    \[ \mathbf{z} = \begin{bmatrix} 4 \\ 1 \\ 2 \end{bmatrix} (12) = \begin{bmatrix} 48 \\ 12 \\ 24 \end{bmatrix} \]
+\end{enumerate}
+
+\subparagraph{Forward-Mode:} In this approach, we group operations as $\mathbf{z} = (\mathbf{v}\mathbf{v}^T)\mathbf{y}$.
+\begin{enumerate}
+    \item First, compute the full Hessian matrix $H = \mathbf{v}\mathbf{v}^T$:
+    \[ H = \begin{bmatrix} 4 \\ 1 \\ 2 \end{bmatrix} \begin{bmatrix} 4 & 1 & 2 \end{bmatrix} = \begin{bmatrix} 16 & 4 & 8 \\ 4 & 1 & 2 \\ 8 & 2 & 4 \end{bmatrix} \]
+    \item Then, compute the final vector $\mathbf{z} = H\mathbf{y}$:
+    \[ \mathbf{z} = \begin{bmatrix} 16 & 4 & 8 \\ 4 & 1 & 2 \\ 8 & 2 & 4 \end{bmatrix} \begin{bmatrix} 2 \\ 2 \\ 1 \end{bmatrix} = \begin{bmatrix} 16(2)+4(2)+8(1) \\ 4(2)+1(2)+2(1) \\ 8(2)+2(2)+4(1) \end{bmatrix} = \begin{bmatrix} 32+8+8 \\ 8+2+2 \\ 16+4+4 \end{bmatrix} = \begin{bmatrix} 48 \\ 12 \\ 24 \end{bmatrix} \]
+\end{enumerate}
+Both methods yield the same result: $\mathbf{z}^T = [48, 12, 24]$.
+
+\paragraph{Computational Cost Analysis}
+We analyze the cost of computing $Z = H\mathbf{y}_1\mathbf{y}_2^T$, interpreted as $Z = (\mathbf{v}\mathbf{v}^T)(\mathbf{y}_1\mathbf{y}_2^T)$. The resulting matrix $Z$ has dimensions $n \times m$. The relative efficiency of each mode depends on the shape of $Z$---that is, whether it is "tall" ($n > m$) or "wide" ($m > n$).
+
+\subparagraph{Forward-Mode Cost:}
+This approach computes the full $n \times n$ Hessian matrix $H$ first: $Z = (\mathbf{v}\mathbf{v}^T) (\mathbf{y}_1\mathbf{y}_2^T)$.
+\begin{enumerate}
+    \item Compute $H = \mathbf{v}\mathbf{v}^T$: $n^2$ multiplications.
+    \item Compute $Y = \mathbf{y}_1\mathbf{y}_2^T$: $nm$ multiplications.
+    \item Compute $Z = HY$: $n^2m$ multiplications.
+\end{enumerate}
+The total multiplications are $n^2 + nm + n^2m = n^2(1+m) + nm$. This approach is burdened by the $O(n^2)$ cost of creating and using the explicit Hessian, which is expensive if $n$ is large.
+
+\subparagraph{Reverse-Mode Cost:}
+This approach avoids forming the full Hessian by using associativity: $Z = \mathbf{v}(\mathbf{v}^T(\mathbf{y}_1\mathbf{y}_2^T))$.
+\begin{enumerate}
+    \item Compute $Y = \mathbf{y}_1\mathbf{y}_2^T$: $nm$ multiplications.
+    \item Compute the row vector $\mathbf{r} = \mathbf{v}^T Y$: $nm$ multiplications.
+    \item Compute the final matrix $Z = \mathbf{v}\mathbf{r}$: $nm$ multiplications.
+\end{enumerate}
+The total multiplications are $3nm$. This approach cleverly avoids the $O(n^2)$ costs.
+
+\subparagraph{Comparison:}
+Forward-mode is preferable when $n^2(1+m) + nm < 3nm$, which simplifies to $n < m(2-n)$. This inequality reveals how the shape of the $n \times m$ output matrix $Z$ dictates the best strategy:
+\begin{itemize}
+    \item If $n \ge 2$, the term $(2-n)$ is zero or negative, making the inequality impossible to satisfy for positive $n, m$. This covers all cases where $Z$ is square or "tall" ($n \ge m$). For these shapes, \textbf{reverse-mode} is always superior because it avoids the large $O(n^2)$ cost of building the Hessian.
+    \item If $n=1$, the inequality becomes $1 < m$. In this scenario, the Hessian is a trivial $1 \times 1$ scalar. \textbf{Forward-mode} becomes more efficient when $m>1$. This corresponds to producing a very "wide" matrix $Z$ (e.g., $1 \times 100$), where the negligible cost of the $1 \times 1$ Hessian makes the forward approach more economical.
+\end{itemize}
+
+
+\section{Programming Problems}
+
+\subsection{GLoVE Word Representations}
+
+\subsubsection{GLoVE Parameter Count (2.1.1)}
+
+The problem states that for each word in a vocabulary of size $V$, the GLoVE model learns two embedding vectors and two scalar biases. For each word, the parameters are:
+\begin{itemize}
+    \item A $d$-dimensional embedding vector $\mathbf{w}_i$, contributing $d$ parameters.
+    \item A second $d$-dimensional embedding vector $\tilde{\mathbf{w}}_i$, contributing $d$ parameters.
+    \item A scalar bias $b_i$, contributing 1 parameter.
+    \item A second scalar bias $\tilde{b}_i$, contributing 1 parameter.
+\end{itemize}
+The total number of parameters for a single word is $d + d + 1 + 1 = 2d + 2$.
+Since there are $V$ words in the vocabulary, the total number of parameters in the model is $V \times (2d + 2)$.
+
+\subsubsection{Expression for Gradient (2.1.2)}
+
+The simplified GLoVE loss function is given by:
+\[ L = \sum_{i=1}^{V} \sum_{j=1}^{V} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right)^2 \]
+To find the gradients, we differentiate this loss function with respect to a specific parameter vector $\mathbf{w}_k$ and a specific bias $b_k$.
+
+\paragraph{Gradient with respect to $\mathbf{w}_i$:}
+The parameter vector $\mathbf{w}_i$ only appears in the loss function terms where the first summation index is equal to $i$. Therefore, we only need to sum over the second index, $j$.
+\[ \frac{\partial L}{\partial \mathbf{w}_i} = \frac{\partial}{\partial \mathbf{w}_i} \sum_{j=1}^{V} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right)^2 \]
+Using the chain rule, where $\frac{d}{dx}u^2 = 2u \frac{du}{dx}$:
+\[ \frac{\partial L}{\partial \mathbf{w}_i} = \sum_{j=1}^{V} 2 \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right) \cdot \frac{\partial}{\partial \mathbf{w}_i} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right) \]
+The derivative of the inner term with respect to $\mathbf{w}_i$ is $\tilde{\mathbf{w}}_j$. This gives the final expression:
+\[ \frac{\partial L}{\partial \mathbf{w}_i} = 2 \sum_{j=1}^{V} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right) \tilde{\mathbf{w}}_j \]
+
+\paragraph{Gradient with respect to $b_i$:}
+Similarly, the bias $b_i$ only appears in terms where the first index is $i$.
+\[ \frac{\partial L}{\partial b_i} = \frac{\partial}{\partial b_i} \sum_{j=1}^{V} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right)^2 \]
+Applying the chain rule:
+\[ \frac{\partial L}{\partial b_i} = \sum_{j=1}^{V} 2 \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right) \cdot \frac{\partial}{\partial b_i} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right) \]
+The derivative of the inner term with respect to the scalar $b_i$ is 1. This gives the final expression:
+\[ \frac{\partial L}{\partial b_i} = 2 \sum_{j=1}^{V} \left( \mathbf{w}_i^T \tilde{\mathbf{w}}_j + b_i + \tilde{b}_j - \log X_{ij} \right) \]
+
+\subsubsection{Implementing Gradient }
+See notebook
+
+\subsubsection{Effect of Embedding Dimension (2.1.4)}
+
+The following plots show the training and validation loss for the symmetric and asymmetric GLoVE models across different embedding dimensions.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.7\textwidth]{output1.png}
+    \caption{Training Loss vs. Embedding Dimension}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.7\textwidth]{output2.png}
+    \caption{Validation Loss vs. Embedding Dimension}
+\end{figure}
+
+\paragraph{1. Optimal $d$:}
+Based on the validation loss graph:
+\begin{itemize}
+    \item For the \textbf{asymmetric model} (dashed blue line), the validation loss is minimized at $d=10$.
+    \item For the \textbf{symmetric model} (solid orange line), the validation loss is minimized and roughly constant for $d$ between 2 and 10.
+\end{itemize}
+
+\paragraph{2. Effect of $d$ on validation error:}
+A larger embedding dimension $d$ does not always lead to better validation error. This phenomenon is explained by the bias-variance tradeoff.
+\begin{itemize}
+    \item When $d$ is too small, the model has high bias and low variance. It is too simple to capture the underlying patterns in the data, which leads to underfitting.
+    \item When $d$ is too large, the model has low bias and high variance. It becomes overly complex and starts to fit the noise in the training data instead of the signal. This overfitting reduces its ability to generalize to the unseen validation set, causing the validation error to increase.
+\end{itemize}
+The validation loss graph clearly shows this U-shaped curve, where the error first decreases and then increases as $d$ grows.
+
+\paragraph{3. Which model is better, and why?}
+The \textbf{asymmetric model performs better} because it achieves a lower overall validation loss (at its optimal dimension $d=10$) compared to the symmetric model.
+
+The reason is that the asymmetric model has more parameters ($2V(d+1)$ vs. $V(d+2)$ for the symmetric case where $W=\tilde{W}$), making it more expressive. The underlying word co-occurrence data is often not symmetric (e.g., the probability of "York" following "New" is different from "New" following "York"). The asymmetric model has the flexibility to capture these non-symmetric relationships, whereas the symmetric model is constrained and cannot.
+
+\subsection{Training the Model}
+
+\subsubsection{Gradient with respect to output layer}
+see notebook
+
+\subsubsection{Gradient with respect to parameters}
+see notebook
+
+\subsubsection{Printing gradients}
+\begin{verbatim}
+loss_derivative[2, 5] 0.0
+loss_derivative[2, 121] 0.0
+loss_derivative[5, 33] 0.0
+loss_derivative[5, 31] 0.0
+
+param_gradient.word_embedding_weights[27, 2] 0.0
+param_gradient.word_embedding_weights[43, 3] 0.01159689251148945
+param_gradient.word_embedding_weights[22, 4] -0.022267062381729714
+param_gradient.word_embedding_weights[2, 5] 0.0
+
+param_gradient.embed_to_hid_weights[10, 2] 0.3793257091930164
+param_gradient.embed_to_hid_weights[15, 3] 0.01604516132110911
+param_gradient.embed_to_hid_weights[30, 9] -0.4312854367997418
+param_gradient.embed_to_hid_weights[35, 21] 0.06679896665436336
+
+param_gradient.hid_bias[10] 0.023428803123345162
+param_gradient.hid_bias[20] -0.02437045237887423
+
+param_gradient.output_bias[0] 0.000970106146902794
+param_gradient.output_bias[1] 0.1686894627476322
+param_gradient.output_bias[2] 0.0051664774143909235
+param_gradient.output_bias[3] 0.1509622647181436
+\end{verbatim}
+
+\subsubsection{Run Model}
+See gradient printing above 
+
+\subsection{Arithmetic and Analysis}
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.7\textwidth]{tsne1.png}
+    \caption{tsne for trained model}
+\end{figure}
+For the trained model, there was an interesting cluster of the pronouns, with his, my, our, your, and their all being very close together.
+Another interseting one was big, little, and few all grouped together. 
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.7\textwidth]{tsne2.png}
+    \caption{Training Loss vs. Embedding Dimension}
+\end{figure}
+Comparing Glove t-sne to the trained model, the points and clusters in glove seem much more evenly space out, whereas the trained model
+has a little more clumping. This is interesting, and shows the difference in the training process for the two methods.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.7\textwidth]{tsne3.png}
+    \caption{Glove 2d representation}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.7\textwidth]{tsne4.png}
+    \caption{Glove Tsnen}
+\end{figure}
+
+For the 2d representation vs the tsne representation, there was much more clustering together in the 2d, whereas the 
+tsne was much more spread out with its clusters. For the normal 2d, there was one really big cluster with a large portion of the words residing in it.
+
+Note, latex graph formatting is being weird here and its making grpahs show up at the end of the notebook. They are on the last 4 pages for this question
+
+\newpage
+\newpage
+
+\includepdf[pages=-]{hw1_code_dms2315.pdf}
+
+\end{document}
